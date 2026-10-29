@@ -1,0 +1,178 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using Scene = UnityEngine.SceneManagement.Scene;
+
+public class GameManager : MonoBehaviour
+{
+
+    [System.Serializable]
+    private class levelData
+    {
+        public string levelName;
+        public Transform spawnPoint;
+        [Header("Enemies")]
+        // enemies in this level
+        public List<GameObject> enemies = new();
+        [Header("Doors")]
+        // what doors to open at the end of this level
+        public List<GameObject> doors = new();
+    }
+    [SerializeField] private List<levelData> levels = new();
+
+    private int levelIndex;
+    private bool bRopesRemoved;
+    [SerializeField] private GameObject ropes;
+    [SerializeField] private HUD hudScript;
+    [SerializeField] private Vignette vignetteScript;
+    [SerializeField] private GameObject player;
+    private FighterBase playerFighterBase;
+
+   
+    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    void Start()
+    {
+        if (player != null)
+        { 
+            playerFighterBase = player.GetComponent<FighterBase>();
+        } 
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        if (levelIndex >= levels.Count)
+        {
+            return;
+        }
+
+        levelData currentLevel = levels[levelIndex];
+        //clean enemies that are already dead from levels enemy list
+        currentLevel.enemies.RemoveAll(enemy => enemy == null);
+
+        //respawn player at level spawn point when dead
+        if (!player.activeInHierarchy)
+        {
+            Time.timeScale = 1f;
+            player.transform.position = currentLevel.spawnPoint.position;
+            playerFighterBase.SetHealth(playerFighterBase.maxHealth); 
+            playerFighterBase.bIsStunned = false;
+            player.SetActive(true);
+            vignetteScript.SetLowHealthVignette(false);
+            FailLevel();
+        }
+
+        //for removing the ropes in level 1
+        CheckRingRopes(currentLevel);
+
+        //end level when all enemies dead
+        if (currentLevel.enemies.Count == 0)
+        {
+            completeLevel(currentLevel);
+        }
+    }
+
+    //remove ring ropes when striker in lvl 1 is dead
+    private void CheckRingRopes(levelData currentLevel)
+    {
+        if (levelIndex != 0 || bRopesRemoved || ropes == null)
+        {
+            return;
+        }
+        if (currentLevel.enemies.Count <= 1)
+        { 
+            bRopesRemoved = true;
+            Destroy(ropes);
+        }
+    }
+
+    //open level doors, add stat point, win if on last level
+    private void completeLevel(levelData completedlevel)
+    {
+        foreach (GameObject door in completedlevel.doors)
+        {
+            if (door != null)
+            {
+                door.SetActive(false);
+            }
+            
+        }
+        if (levelIndex >= levels.Count - 1)
+        {
+            Win();
+            return;
+        }
+        levelIndex++;
+        hudScript.statPoints += 1;
+        StartCoroutine(SlightPause());
+        
+    }
+
+    //pause at the end of the level before stat screen / win screen pops up
+    private IEnumerator SlightPause()
+    {
+        yield return new WaitForSeconds(0.5f);
+        hudScript.OpenStatScreen();
+    }
+
+    // spawn the next levels enemies
+    public void SpawnEnemies()
+    {
+        Debug.Log(levelIndex);
+        Debug.Log(levels[levelIndex].enemies.Count);
+        if (levelIndex == 0 || levels[levelIndex].enemies == null || levels[levelIndex].enemies.Count <= 0)
+        {
+            Debug.Log("Couldnt Spawn Enemies");
+            return;
+            
+        }
+
+        foreach (GameObject enemy in levels[levelIndex].enemies)
+        {
+            Debug.Log("Spawning Enemies");
+            enemy.SetActive(true);
+            
+        }
+
+    }
+
+    // for resetting the game, returns doors for each level
+    public void CloseDoors()
+    {
+        foreach (GameObject door in levels[levelIndex - 1].doors)
+        {
+            if (door != null)
+            {
+                door.SetActive(true);
+            }
+        }
+    }
+
+
+    private void Win()
+    {
+        hudScript.WinScreen();
+    }
+
+    //reset alive enemies to beginning of level
+    private void FailLevel()
+    {
+        foreach (var enemy in levels[levelIndex].enemies)
+        {
+            if (enemy != null && enemy.TryGetComponent<EnemyBase>(out EnemyBase component))
+            {
+                component.ResetEnemy();
+            }
+        }
+    }
+
+    // reload the scene
+    public void Restart()
+    {
+        Time.timeScale = 1f;
+        Scene currentScene = SceneManager.GetActiveScene();
+        SceneManager.LoadScene(currentScene.buildIndex);
+    }
+    
+}
