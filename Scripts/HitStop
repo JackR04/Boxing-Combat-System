@@ -1,0 +1,56 @@
+using System.Collections;
+using UnityEngine;
+
+public class HitStop : MonoBehaviour
+{
+    [SerializeField, Range(0.001f, 0.1f)]
+    private float hitTimeScale;
+    private float normalFixedDeltaTime;
+    private Coroutine hitStopCoroutine;
+
+    private void Awake()
+    {
+        //set normal time
+        normalFixedDeltaTime = Time.fixedDeltaTime;
+    }
+
+    // play hit stop coroutine
+    public void Play(float duration)
+    {
+        if (duration <= 0)
+        {
+            return;
+        }
+
+        if (hitStopCoroutine != null)
+        {
+            StopCoroutine(hitStopCoroutine);
+            RestoreTime();
+        }
+        hitStopCoroutine = StartCoroutine(HitStopRoutine(duration));
+    }
+
+    // pause time for duration, used after punch, duration depends on the punch
+    private IEnumerator HitStopRoutine(float duration)
+    {
+        Time.timeScale = hitTimeScale;
+        Time.fixedDeltaTime = normalFixedDeltaTime * hitTimeScale;
+
+        yield return new WaitForSecondsRealtime(duration);
+        RestoreTime();
+        hitStopCoroutine = null;
+    }
+
+    // set time back to normal
+    private void RestoreTime()
+    {
+        Time.timeScale = 1f;
+        Time.fixedDeltaTime = normalFixedDeltaTime;
+    }
+
+    // set time back to normal if gameobject is disabled
+    private void OnDisable()
+    {
+        RestoreTime();
+    }
+}

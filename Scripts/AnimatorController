@@ -1,0 +1,175 @@
+using System.Diagnostics.Contracts;
+using UnityEngine;
+using UnityEngine.Android;
+
+public class AnimatorController : MonoBehaviour
+{
+    [SerializeField] Animator animator;
+    //create hash to avoid errors
+    private static readonly int SpeedHash = Animator.StringToHash("Speed");
+    private static readonly int blockingHash = Animator.StringToHash("bIsBlocking");
+    private static readonly int stunnedHash = Animator.StringToHash("bIsStunned");
+    private static readonly int dodgeHash = Animator.StringToHash("Dodge");
+    private static readonly int jabHash = Animator.StringToHash("Jab");
+    private static readonly int crossHash = Animator.StringToHash("Cross");
+    private static readonly int hookHash = Animator.StringToHash("Hook");
+    private static readonly int upperCutHash = Animator.StringToHash("UpperCut");
+    private static readonly int punchHitHash = Animator.StringToHash("bPunchHit");
+    private static readonly int locomotionHash = Animator.StringToHash("Base Layer.Locomotion");
+    private static readonly int hookReactionHash = Animator.StringToHash("HookReaction");
+    private static readonly int uppercutReactionHash = Animator.StringToHash("UpperCutReaction");
+    private static readonly int hitReaction1Hash = Animator.StringToHash("HitReaction1");
+    private static readonly int hitReaction2Hash = Animator.StringToHash("HitReaction2");
+    private static readonly int blockHitRightHash = Animator.StringToHash("BlockHitReactionRight");
+    private static readonly int blockHitLeftHash = Animator.StringToHash("BlockHitReactionLeft");
+    private void Awake()
+    {
+        if (animator == null)
+        { 
+            animator = GetComponentInChildren<Animator>();    
+        }
+        if (animator == null)
+        {
+            Debug.LogError($"{name} Has No Animator");
+            enabled = false;
+        }
+    }
+
+    //movement speed based on fighters speed stat
+    public void SetMovementSpeed(float speed)
+    {
+        if (animator != null)
+        {
+            animator.SetFloat(SpeedHash, speed);
+        }
+    }
+
+    //turn on / off block animation
+    public void SetBlocking(bool bIsBlocking)
+    {
+        if (animator != null)
+        {
+            animator.SetBool(blockingHash, bIsBlocking);
+        }
+    }
+
+    //turn on / off stun animation
+    public void SetStunned(bool bIsStunned)
+    {
+        if (animator != null)
+        {
+           
+            animator.SetBool(stunnedHash, bIsStunned);
+        }
+    }
+
+    
+    public void PlayDodge()
+    {
+        if (animator != null)
+        {
+            animator.SetTrigger(dodgeHash);
+        }
+    }
+
+    
+    public void PlayJab()
+    {
+        if (animator != null)
+        { 
+            animator.SetTrigger(jabHash);
+        }
+    }
+
+    public void PlayCross()
+    {
+        if (animator != null)
+        {
+            animator.SetTrigger(crossHash);
+        }
+    }
+
+    // randomise hit reaction between two animations, for Jab and Cross
+    public void PlayRandomHitReaction()
+    {
+        if (animator != null)
+        {
+            float rand = UnityEngine.Random.value;
+            if (rand > 0.5)
+            {
+                animator.SetTrigger(hitReaction2Hash);
+            }
+            else
+            {
+                animator.SetTrigger(hitReaction1Hash);
+            }
+        }
+    }
+
+    public void PlayHook()
+    {
+        if (animator != null)
+        {
+            animator.SetTrigger(hookHash);
+        }
+    }
+
+    
+    public void PlayHookHitReaction()
+    {
+        if (animator != null)
+        {
+            animator.SetTrigger(hookReactionHash);
+        }
+    }
+
+    public void PlayUpperCut()
+    {
+        if (animator != null)
+        {
+            animator.SetTrigger(upperCutHash);
+        }
+    }
+
+    public void PlayUpperCutHitReaction()
+    {
+        if (animator != null)
+        {
+            animator.SetTrigger(uppercutReactionHash);
+        }
+    }
+
+    //move from punch animation to locomotion
+    public void PunchHit()
+    {
+        if (animator != null)
+        {
+            animator.CrossFadeInFixedTime(locomotionHash, 0.08f);
+        }
+    }
+
+    // move from stun animation to locomotion
+    public void EndStun()
+    {
+        if (animator != null)
+        {
+            animator.CrossFadeInFixedTime(locomotionHash, 0.08f);
+        }
+    }
+
+    public void PlayBlockRight()
+    {
+        if (animator != null)
+        {
+            animator.SetTrigger(blockHitRightHash);
+        }
+    }
+
+    public void PlayBlockLeft()
+    {
+        if (animator != null)
+        {
+            animator.SetTrigger(blockHitLeftHash);
+        }
+    }
+}
