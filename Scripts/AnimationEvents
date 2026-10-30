@@ -1,0 +1,42 @@
+using UnityEngine;
+
+public class AnimationEvents : MonoBehaviour
+{
+    [SerializeField] private FighterBase fighterBase;
+    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    void Start()
+    {
+        
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        
+    }
+
+    // when fighter has been punched
+    public void PunchHit()
+    {
+        fighterBase.PunchImpact();
+    }
+
+    // last frame of attack animation, if attack has not landed
+    public void AttackFinished()
+    { 
+        fighterBase.AttackFinished();
+    }
+
+    // Fighter has been hit while blocking
+    public void BlockHitStarted()
+    {
+        fighterBase.bBlockHitIsPlaying = true;
+    }
+
+    //end of blocked hit animation, returns to blocking animation
+    public void BlockHitFinished()
+    {
+        fighterBase.StartBlock();
+        fighterBase.bBlockHitIsPlaying = false;
+    }
+}

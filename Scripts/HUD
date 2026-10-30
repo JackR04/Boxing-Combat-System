@@ -1,0 +1,341 @@
+using NUnit.Framework;
+using System.Collections;
+using System.Collections.Generic;
+using TMPro;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.ProBuilder.MeshOperations;
+using UnityEngine.UI;
+
+public class HUD : MonoBehaviour
+{
+    [SerializeField] private Canvas mainHud;
+    [SerializeField] private GameManager gameManager;
+    [Header ("Stamina")]
+    [SerializeField] private Slider staminaSlider;
+    [SerializeField] private TextMeshProUGUI staminaText;
+    [Header ("Player Fighter Base")]
+    [SerializeField] private FighterBase playerBase;
+    private PlayerMovement PlayerMovement;
+    private float maxStaminaValue;
+    private Vignette vignetteScript;
+    [Header ("Health")]
+    [SerializeField] private Slider healthSlider;
+    [SerializeField] private TextMeshProUGUI healthText;
+    private float maxHealthValue;
+
+    [Header("Stat Change")]
+    [SerializeField] private Canvas statChangeCanvas;
+    private int staminaStat;
+    private int strengthStat;
+    private int speedStat;
+    private int reachStat;
+    public int statPoints = 12;
+    [SerializeField] private List<GameObject> staminaSquareFills;
+    [SerializeField] private List<GameObject> strengthSquareFills;
+    [SerializeField] private List<GameObject> speedSquareFills;
+    [SerializeField] private List<GameObject> reachSquareFills;
+    [SerializeField] private TextMeshProUGUI statPointsText;
+    public bool bStatScreenOpen;
+    [SerializeField] private Button firstSelectedButton;
+
+    [Header("Win Screen")]
+    [SerializeField] private Canvas winCanvas;
+
+    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    void Start()
+    {
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+        if (playerBase != null)
+        {
+            // set stamina and health sliders to max health and stamina
+            maxStaminaValue = 50.0f * (float)(0.5 * playerBase.GetStat(FighterBase.STAT.STAMINA));
+            staminaSlider.maxValue = maxStaminaValue;
+            maxHealthValue = 40.0f + 10.0f * (float)(playerBase.GetStat(FighterBase.STAT.STRENGTH));
+            healthSlider.maxValue = maxHealthValue;
+            PlayerMovement = playerBase.gameObject.GetComponent<PlayerMovement>();
+            vignetteScript = playerBase.gameObject.GetComponent<Vignette>();
+        }
+
+        OpenStatScreen();
+        
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        if (playerBase != null)
+        { 
+            //set sliders to health and stamina values
+            staminaSlider.value = playerBase.GetStaminaLeft();
+            staminaText.text = ("Stamina: " + (int)(staminaSlider.value));
+            healthSlider.value = playerBase.GetHealth();
+            healthText.text = ("Health: " + (int)(healthSlider.value));
+        }
+
+        if (statPointsText != null)
+        {
+            // put unused statpoints on stat menu
+            statPointsText.text = (statPoints.ToString());
+        }
+    }
+
+    //set new maxinmum stamina value based on stamina stat
+    public void UpdateMaxStamina(int newStaminaStat)
+    {
+        maxStaminaValue = 50.0f * (float)(0.5 * newStaminaStat);
+        staminaSlider.maxValue = maxStaminaValue;
+    }
+    //set new maximum health value based on strength stat
+    public void UpdateMaxHealth(int newHealthStat)
+    {
+        maxHealthValue = 40.0f + 10.0f * (float)(newHealthStat);
+        healthSlider.maxValue = maxHealthValue;
+    }
+
+    public void OpenStatScreen()
+    {
+        if (PlayerMovement == null)
+        {
+            return;
+        }
+        bStatScreenOpen = true;
+        PlayerMovement.DisableMovement();
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+        mainHud.gameObject.SetActive(false);
+        statChangeCanvas.gameObject.SetActive(true);
+        // set first selected button for controller to work
+        if (firstSelectedButton != null)
+        {
+            EventSystem.current.SetSelectedGameObject(firstSelectedButton.gameObject);
+        }
+        
+    }
+
+    //increasing the players stats based on stat screen allocation
+    public void IncreaseStat(string stat)
+    {
+        
+        if (statPoints == 0)
+        {
+            return;
+        }
+        switch (stat)
+        {
+            case "Stamina":
+                if (staminaStat >= 0 && staminaStat < 5)
+                {
+                    Debug.Log($"{stat} increased");
+                    staminaStat++;
+                    statPoints--;
+                    FillNextSquare(staminaSquareFills);
+                }
+                
+                break;
+            case "Strength":
+                if (strengthStat >= 0 && strengthStat < 5)
+                {
+                    strengthStat++;
+                    statPoints--;
+                    FillNextSquare(strengthSquareFills);
+                }
+
+                break;
+            case "Speed":
+                if (speedStat >= 0 && speedStat < 5)
+                {
+                    speedStat++;
+                    statPoints--;
+                    FillNextSquare(speedSquareFills);
+                }
+
+                break;
+            case "Reach":
+                if (reachStat >= 0 && reachStat < 5)
+                {
+                    reachStat++;
+                    statPoints--;
+                    FillNextSquare(reachSquareFills);
+                }
+
+                break;
+            default:
+                break;
+        }
+    }
+
+    //decreasing the players stats based on stat screen allocation
+    public void DecreaseStat(string stat)
+    {
+        switch (stat)
+        {
+            case "Stamina":
+                if (staminaStat > 0)
+                {
+                    staminaStat--;
+                    statPoints++;
+                    EmptyLastSquare(staminaSquareFills);
+                }
+                break;
+            case "Strength":
+                if (strengthStat > 0)
+                {
+                    strengthStat--;
+                    statPoints++;
+                    EmptyLastSquare(strengthSquareFills);
+                }
+                break;
+            case "Speed":
+                if (speedStat > 0)
+                {
+                    speedStat--;
+                    statPoints++;
+                    EmptyLastSquare(speedSquareFills);
+                }
+                break;
+            case "Reach":
+                if (reachStat > 0)
+                {
+                    reachStat--;
+                    statPoints++;
+                    EmptyLastSquare(reachSquareFills);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    //fill next void square when stat increase button pressed in stat screen
+    private void FillNextSquare(List<GameObject> fillSquares)
+    {
+        if (fillSquares == null || fillSquares.Count <= 0)
+        {
+            Debug.Log("List Not Found");
+            return;
+        }
+        for (int i = 0; i <= fillSquares.Count - 1; i++)
+        {
+            if (fillSquares[i].activeInHierarchy)
+            {
+                Debug.Log("Fill Active");
+                continue;
+            }
+            else
+            {
+                Debug.Log("Fill Filled");
+                fillSquares[i].SetActive(true);
+                return;
+            }
+        }
+    }
+
+    // removes fill from last square on the stat screen, when decrease stat button is pressed
+    private void EmptyLastSquare(List<GameObject> fillSquares)
+    {
+        if (fillSquares == null || fillSquares.Count <= 0)
+        {
+            return;
+        }
+        for (int i = fillSquares.Count - 1; i >= 0; i--)
+        {
+            if (!fillSquares[i].activeInHierarchy)
+            {
+                continue;
+            }
+            else 
+            {
+                fillSquares[i].SetActive(false);
+                return;
+            }
+        }
+        
+    }
+
+    // Fills squares corresponding to current stats
+    public void SetSquares()
+    {
+        for (int i = 0; i < staminaStat; i++)
+        {
+            staminaSquareFills[i].SetActive(true);
+        }
+
+        for (int i = 0; i < strengthStat; i++)
+        {
+            strengthSquareFills[i].SetActive(true);
+        }
+
+        for (int i = 0; i < speedStat; i++)
+        {
+            speedSquareFills[i].SetActive(true);
+        }
+
+        for (int i = 0; i < reachStat; i++)
+        {
+            reachSquareFills[i].SetActive(true);
+        }
+    }
+
+    // applys new stats to player allocated on stat screen
+    public void Apply()
+    {
+       
+        if (statPoints > 0)
+        {
+            StartCoroutine(StatPointTextGlow());
+            return;
+        }
+        if (playerBase != null)
+        {
+            playerBase.ChangeStats(staminaStat, strengthStat, speedStat, reachStat);
+            UpdateMaxHealth(strengthStat);
+            UpdateMaxStamina(staminaStat);
+        }
+        if (vignetteScript != null)
+        {
+            vignetteScript.SetLowHealthVignette(false);
+        }
+        
+        PlayerMovement.EnableMovement();
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+        mainHud.gameObject.SetActive(true);
+        statChangeCanvas.gameObject.SetActive(false);
+        bStatScreenOpen = false;
+    }
+
+    //highlights stat point text when apply is clicked but stat points arent all allocated
+    private IEnumerator StatPointTextGlow()
+    {
+        statPointsText.color = Color.red;
+        
+        yield return new WaitForSecondsRealtime(0.5f);
+
+        statPointsText.color = Color.white;
+        
+    }
+
+    // set win screen to true when last enemy of last level is killed
+    public void WinScreen()
+    {
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+        PlayerMovement.DisableMovement();
+        bStatScreenOpen = true;
+        winCanvas.gameObject.SetActive(true);
+    }
+
+    // puts the level back to beginning
+    public void RestartButton()
+    {
+        statPoints = 12;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+        PlayerMovement.EnableMovement();
+        bStatScreenOpen = false;
+        winCanvas.gameObject.SetActive(false);
+        gameManager.Restart();
+    }
+}

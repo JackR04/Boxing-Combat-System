@@ -1,0 +1,806 @@
+
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class FighterBase : MonoBehaviour
+{
+    public enum FIGHTERCLASS 
+    {
+        PLAYER,
+        BRUTE,
+        STRIKER,
+        LANCER,
+    }
+    public enum STAT
+    {
+        SPEED,
+        STAMINA,
+        STRENGTH,
+        REACH,
+    }
+
+    public enum ACTIVEATTACK
+    { 
+        JAB,
+        CROSS,
+        HOOK,
+        UPPERCUT,
+        NONE,
+    }
+    public FIGHTERCLASS fighter;
+    [SerializeField] private Rigidbody rb;
+    [HideInInspector] public EnemyBase enemyPlayerIsAttacking;
+    //stats
+    [Header("Stats")]
+    [SerializeField]
+    private int strengthStat;
+    [SerializeField]
+    private int staminaStat;
+    [SerializeField]
+    private int reachStat;
+    [SerializeField]
+    private int speedStat;
+    public int statPoints = 0;
+    [Header("Arm Hit Points")]
+    [SerializeField]
+    private GameObject leftHitPoint;
+    [SerializeField]
+    private GameObject rightHitPoint;
+    [SerializeField] private GameObject punchOrigin;
+    [Header("Movement Bools")]
+    public bool bIsBlocking;
+    public bool bIsDodging;
+    [Header("Health & Stamina")]
+    //base health is 40 + 10 for each strength stat
+    [SerializeField] private float health = 40.0f;
+    [HideInInspector] public float maxHealth;
+    [SerializeField] private float staminaLeft;
+    [SerializeField] private HealthBar enemyHealthBar;
+    private float dodgeSpeed = 15.0f;
+    private float dodgeTimer;
+    private float dodgeDuration = 1f;
+    private int characterHeight = 2;
+    [HideInInspector] public bool bCanAttack;
+    [HideInInspector] public float attackTime;
+    private bool bAttackHasHit;
+    private float activeAttackDamage;
+    private float attackRadius = 0.24f;
+    private ACTIVEATTACK activeAttack;
+    // attack distance = base distance + (0.1 * reachstat)
+   [HideInInspector] public float baseJabDistance = 0.5f;
+   [HideInInspector] public float baseCrossDistance = 0.65f;
+   [HideInInspector] public float baseHookDistance = 0.25f;
+   [HideInInspector] public float baseUppercutDistance = 0.125f;
+    private float maxStamina;
+    // used to limit amount of attackers to 2
+    [HideInInspector] public List<GameObject> amountOfAttackers = new List<GameObject>();
+    [HideInInspector] public List<GameObject> attackersWaitingList = new List<GameObject>();
+    private int maxSimultaneousAttackers = 2;
+
+    [HideInInspector] public bool bIsStunned;
+    [HideInInspector] public bool bIsAttacking;
+
+    [Header("Stun")]
+    [SerializeField] private float playerStunDuration;
+    [SerializeField] private float enemyStunDuration;
+    [SerializeField, UnityEngine.Range(0.01f, 1f)] private float staminaAfterStunPercentage = 0.25f;
+    private PlayerMovement playerMovement;
+
+    [Header("Animation")]
+    [SerializeField] private AnimatorController animatorController;
+    [SerializeField] HitStop hitStopScript;
+    [HideInInspector] public bool bBlockHitIsPlaying;
+
+    [Header ("Game Effects")]
+    [SerializeField] private Vignette vignetteScript;
+    [SerializeField] private CombatEffects combatEffectsScript;
+    private void Awake()
+    {
+        // each fighter is a class with different stat allocations
+        switch (fighter)
+        {
+            case FIGHTERCLASS.BRUTE:
+                strengthStat = 5;
+                speedStat = 2;
+                staminaStat = 3;
+                reachStat = 2;
+                break;
+            case FIGHTERCLASS.STRIKER:
+                strengthStat = 2;
+                speedStat = 5;
+                staminaStat = 3;
+                reachStat = 2;
+                break;
+            case FIGHTERCLASS.LANCER:
+                strengthStat = 3;
+                speedStat = 2;
+                staminaStat = 2;
+                reachStat = 5;
+                break;
+            default:
+                strengthStat = 3;
+                speedStat = 3;
+                staminaStat = 3;
+                reachStat = 3;
+                break;
+        }
+        rb = GetComponent<Rigidbody>();
+        playerMovement = GetComponent<PlayerMovement>();
+        animatorController = GetComponent<AnimatorController>();
+        if (fighter == FIGHTERCLASS.PLAYER)
+        {
+            // used for damage and stunned vignettes
+            vignetteScript = GetComponent<Vignette>();
+        }
+        if (fighter != FIGHTERCLASS.PLAYER)
+        {
+            // used for healthbars above enemies head
+            enemyHealthBar = GetComponent<HealthBar>();
+            if (enemyHealthBar == null)
+            {
+                
+                return;
+            }
+        }
+        combatEffectsScript = GetComponent<CombatEffects>();
+
+        bCanAttack = true;
+        dodgeTimer = dodgeDuration;
+
+        playerStunDuration = 3.0f;
+        enemyStunDuration = 5.0f;
+    }
+    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    void Start()
+    {
+
+        ChangeStats(staminaStat, strengthStat, speedStat, reachStat);
+    }
+    
+
+    // Update is called once per frame
+    void Update()
+    {
+        // start and end dodging
+        if (bIsDodging)
+        { 
+            dodgeTimer -= Time.deltaTime;
+        }
+        if (dodgeTimer <= 0)
+        {
+            bIsDodging = false;
+        }
+      
+        // regain stamina while not attacking, blocking, dodging or stunned
+        if (bCanAttack && !bIsBlocking && !bIsDodging && !bIsStunned)
+        {
+            staminaLeft += 5 * Time.deltaTime;
+        }
+        staminaLeft = Mathf.Clamp(staminaLeft, 0.0f, maxStamina);
+
+        // Stun fighter when stamina is low
+        if (staminaLeft <= 2 && !bIsStunned)
+        { 
+            float duration = fighter == FIGHTERCLASS.PLAYER? playerStunDuration : enemyStunDuration;
+            ApplyStun(duration);
+        }
+
+       
+       
+    }
+    public float GetHealth()
+    { 
+        return health;
+    }
+    public float GetStaminaLeft()
+    {
+        return staminaLeft;
+    }
+
+    // Damage used to lower health (or stamina if blocking), active attack used to decide reaction animation, hitPoint and attackDirection used to spawn blood particles
+    public void UpdateHealth(float damage, ACTIVEATTACK activeAttack, Vector3 hitPoint, Vector3 attackDirection)
+    {
+        bCanAttack = false;
+        if (bIsBlocking)
+        {
+            if (combatEffectsScript != null)
+            {
+                
+                combatEffectsScript.PlayBlock();
+            }
+            if (staminaLeft - damage < 0)
+            {
+                damage -= staminaLeft;
+                staminaLeft = 0;
+                StopBlock();
+                UpdateHealth(damage, activeAttack, hitPoint,attackDirection);
+            }
+            else
+            {
+                staminaLeft -= damage;
+                if (animatorController != null)
+                {
+
+                    StopBlock();
+                    
+
+                    //smthin is broke with block hit reactions, players and enemies get stuck on block left
+                    /*
+                    switch (activeAttack)
+                    {
+                        case ACTIVEATTACK.JAB:
+                            Debug.Log($"{name} Entered Block Left");
+                            animatorController.PlayBlockLeft();
+                            break;
+                        case ACTIVEATTACK.CROSS:
+
+                            animatorController.PlayBlockRight();
+                            break;
+                        case ACTIVEATTACK.HOOK:
+
+                            animatorController.PlayBlockRight();
+                            break;
+                        case ACTIVEATTACK.UPPERCUT:
+
+                            animatorController.PlayBlockLeft();
+                            break;
+
+                    }
+                    */
+                }
+               
+
+
+
+            }
+
+        }
+       
+        else
+        {
+            if (bBlockHitIsPlaying)
+            {
+                
+                return;
+            }
+            health -= damage;
+            if (enemyHealthBar != null)
+            {
+              enemyHealthBar.DamageHealthBar(damage);
+            }
+            if (combatEffectsScript != null)
+            {
+                combatEffectsScript.PlayDamage(hitPoint, attackDirection);
+            }
+            if (vignetteScript != null)
+            {
+                vignetteScript.ApplyHitVignette();
+                if (health <= maxHealth * 0.25)
+                {
+                    vignetteScript.SetLowHealthVignette(true);
+                }
+            }
+            switch (activeAttack)
+            {
+                case ACTIVEATTACK.JAB:
+                    
+
+                    animatorController.PlayRandomHitReaction();
+                    break;
+                case ACTIVEATTACK.CROSS:
+                    
+
+                    animatorController.PlayRandomHitReaction();
+                    break;
+                case ACTIVEATTACK.HOOK:
+                    
+
+                    animatorController.PlayHookHitReaction();
+                    break;
+                case ACTIVEATTACK.UPPERCUT:
+                    
+
+                    animatorController.PlayUpperCutHitReaction();
+                    break;
+                default:
+
+                    
+                    break;
+            }
+        }
+        bCanAttack = true;
+        if (health <= 0)
+        {
+            Die();
+        }
+
+    }
+
+    public void SetHealth(float newHealth)
+    { 
+        health = newHealth;
+    }
+    private void Die()
+    {
+        if (fighter == FIGHTERCLASS.PLAYER)
+        { 
+            gameObject.SetActive(false);
+            bCanAttack = true;
+            bIsBlocking = false;
+            bIsStunned = false;
+            bIsDodging = false;
+
+            return;
+        }
+        Destroy(gameObject);
+    }
+    public void Jab()
+    {
+        if (!bCanAttack || staminaLeft < 5 || bIsStunned || !leftHitPoint || !rightHitPoint || !animatorController)
+        {
+            return;
+        }
+        
+        StopBlock();
+        bAttackHasHit = false;
+        activeAttackDamage = 3 + strengthStat;
+        activeAttack = ACTIVEATTACK.JAB;
+        bIsBlocking = false;
+        bIsAttacking = true;
+        bCanAttack = false;
+        attackTime = 0.5f;
+        staminaLeft -= 3;
+        animatorController.PlayJab();
+        
+    }
+    public void Cross()
+    {
+        if (!bCanAttack || staminaLeft < 5 || bIsStunned || !leftHitPoint || !rightHitPoint || !animatorController)
+        {
+            return;
+        }
+  
+        StopBlock();
+        bAttackHasHit = false;
+        activeAttackDamage = 5 + strengthStat;
+        activeAttack = ACTIVEATTACK.CROSS;
+        bIsBlocking = false;
+        bIsAttacking = true;
+        bCanAttack = false;
+        attackTime = 0.5f;
+        staminaLeft -= 5;
+        animatorController.PlayCross();
+    }
+    public void Hook()
+    {
+        if (!bCanAttack || staminaLeft < 8 || bIsStunned || !leftHitPoint || !rightHitPoint || !animatorController)
+        {
+            return;
+        }
+        
+        StopBlock();
+        bAttackHasHit = false;
+        activeAttackDamage = 10 + strengthStat;
+        activeAttack = ACTIVEATTACK.HOOK;
+        bIsBlocking = false;
+        bIsAttacking = true;
+        bCanAttack = false;
+        attackTime = 0.75f;
+        staminaLeft -= 8;
+        animatorController.PlayHook();
+    }
+    public void UpperCut()
+    {
+        if (!bCanAttack || staminaLeft < 6 || bIsStunned || !leftHitPoint || !rightHitPoint || !animatorController)
+        {
+            return;
+        }
+        
+        StopBlock();
+        bAttackHasHit = false;
+        activeAttackDamage = 13 + strengthStat;
+        activeAttack = ACTIVEATTACK.UPPERCUT;
+        bIsBlocking = false;
+        bIsAttacking = true;
+        bCanAttack = false;
+        attackTime = 0.9f;
+        staminaLeft -= 10;
+        animatorController.PlayUpperCut();
+    }
+
+    private float GetPunchDistance(ACTIVEATTACK attack)
+    {
+        float baseReach;
+        switch (attack)
+        {
+            case ACTIVEATTACK.JAB:
+                
+                baseReach = baseJabDistance;
+                break;
+            case ACTIVEATTACK.CROSS:
+                baseReach = baseCrossDistance;
+                break;
+            case ACTIVEATTACK.HOOK:
+                baseReach = baseHookDistance;
+                break;
+            case ACTIVEATTACK.UPPERCUT:
+                baseReach = baseUppercutDistance;
+                break;
+            default:
+                return 0f;
+        }
+        return baseReach + (0.1f * reachStat);
+    }
+
+    private float GetHitStopDuration(ACTIVEATTACK activeAttack)
+    {
+        switch (activeAttack)
+        {
+            case ACTIVEATTACK.JAB:
+                return 0.035f;
+            case ACTIVEATTACK.CROSS:
+                return 0.045f;
+            case ACTIVEATTACK.HOOK:
+                return 0.055f;
+            case ACTIVEATTACK.UPPERCUT:
+                return 0.065f;
+            default:
+                return 0.035f;
+        }
+    }
+
+    // plays hit reaction animation if this gameobject is hit
+    public void PunchImpact()
+    {
+        if (!bIsAttacking || bIsStunned || bAttackHasHit || !punchOrigin)
+        {
+            return;
+        }
+        
+        float punchDistance = GetPunchDistance(activeAttack);
+        Vector3 hitPos = GetHitPoint();
+
+        Collider[] collidersHit = Physics.OverlapSphere(hitPos, attackRadius);
+        bAttackHasHit = HitColliders(collidersHit, activeAttackDamage);
+        if (bAttackHasHit && animatorController != null)
+        {
+            animatorController.PunchHit();
+            AttackFinished();
+        }
+        else
+        {
+            AttackFinished();
+        }
+    }
+
+    // Reset for next attack
+    public void AttackFinished()
+    {
+        
+        activeAttack = ACTIVEATTACK.NONE;
+        activeAttackDamage = 0;
+        bIsAttacking = false;
+        bCanAttack = true;
+    }
+
+    //returns point where attack will end
+    private Vector3 GetHitPoint()
+    {
+        switch (activeAttack)
+        {
+            case ACTIVEATTACK.JAB:
+                
+                return punchOrigin.transform.position + punchOrigin.transform.forward * GetPunchDistance(activeAttack);
+                
+            case ACTIVEATTACK.CROSS:
+                return punchOrigin.transform.position + punchOrigin.transform.forward * GetPunchDistance(activeAttack);
+
+            case ACTIVEATTACK.HOOK:
+                return punchOrigin.transform.position + punchOrigin.transform.forward * GetPunchDistance(activeAttack) + transform.right * 0.15f;
+
+            case ACTIVEATTACK.UPPERCUT:
+                return punchOrigin.transform.position + punchOrigin.transform.forward * GetPunchDistance(activeAttack) + transform.up * 0.15f;
+
+            default:
+                return punchOrigin.transform.position;
+                
+        }
+    }
+
+    // Checks if an opponent has been hit by a punch
+    private bool HitColliders(Collider[] collidersHit, float damage)
+    {
+        Vector3 hitSpherePos = GetHitPoint();
+        
+        foreach (Collider collider in collidersHit)
+        {
+            FighterBase target = collider.GetComponent<FighterBase>();
+            // skip invalid targets
+            if (target == null || target == this)
+            {
+                continue;
+            }
+
+            Vector3 impactPoint = collider.ClosestPoint(hitSpherePos);
+            Vector3 attackDirection = (target.transform.position - transform.position).normalized;
+          
+            target.UpdateHealth(activeAttackDamage, activeAttack, impactPoint, attackDirection);
+
+            if (hitStopScript != null && fighter == FIGHTERCLASS.PLAYER)
+            {
+                // apply hit stop if player hits an enemy
+                float hitStopDuration = GetHitStopDuration(activeAttack);
+                hitStopScript.Play(hitStopDuration);
+            }
+
+            EnemyBase enemy = collider.GetComponent<EnemyBase>();
+            if (enemy != null && fighter == FIGHTERCLASS.PLAYER && enemy != enemyPlayerIsAttacking)
+            {
+                //Tells enemy if player is attacking it for enemy reactions
+                enemyPlayerIsAttacking = enemy;
+                playerMovement.SetCurrentEnemyPlayerIsAttacking(enemy);
+            }
+            return true;
+            
+            
+            
+        }
+        // missed a punch
+        combatEffectsScript.PlayMissedPunch();
+        return false;
+    }
+
+    // checks if theres a free attack slot to attack player
+    public bool RequestAttackSlot(GameObject enemy)
+    {
+        if (enemy == null)
+        { 
+            return false;
+        }
+
+        CleanAttackerLists();
+
+        // checks if enemy already has attack slot
+        if (amountOfAttackers.Contains(enemy))
+        { 
+            return true;
+        }
+
+        if (!attackersWaitingList.Contains(enemy))
+        {
+            attackersWaitingList.Add(enemy);
+        }
+
+        if (amountOfAttackers.Count >= maxSimultaneousAttackers)
+        {
+            return false;
+        }
+
+        if (attackersWaitingList.Count == 0 || attackersWaitingList[0] != enemy)
+        {
+            return false;
+        }
+
+        attackersWaitingList.RemoveAt(0);
+        amountOfAttackers.Add(enemy);
+        return true;
+    }
+
+    // check if enemy is currently attacking
+    public bool HasAttackSlot(GameObject enemy)
+    {
+        CleanAttackerLists();
+        return enemy != null && amountOfAttackers.Contains(enemy);
+    }
+
+    // Dead enemys release attack slot
+    public void ReleaseAttackSlot(GameObject enemy)
+    {
+        if (enemy == null)
+        {
+            return;
+        }
+
+        amountOfAttackers.Remove(enemy);
+        attackersWaitingList.Remove(enemy);
+    }
+
+    // remove all dead attackers in waiting list
+    private void CleanAttackerLists()
+    {
+        amountOfAttackers.RemoveAll(enemy => enemy == null);
+        attackersWaitingList.RemoveAll(enemy => enemy == null);
+    }
+
+    //start blocking animation
+    public void StartBlock() 
+    {
+        if (bIsStunned || bIsDodging || !bCanAttack || staminaLeft <= 0f || !leftHitPoint || !rightHitPoint)
+        {
+            return;
+        }
+        if (staminaLeft > 0)
+        {
+            if (animatorController != null)
+            {
+                animatorController.SetBlocking(true);
+            }
+            bIsBlocking = true;
+        }
+       
+    }
+
+    // end block animation
+    public void StopBlock()
+    {
+        
+        if(animatorController != null)
+        {
+            animatorController.SetBlocking(false);
+
+        }
+        bIsBlocking = false;
+    }
+    public void Dodge()
+    {
+        if (bIsStunned || bIsDodging || !bCanAttack || staminaLeft < 5)
+        {
+            return;
+        }
+
+        staminaLeft -= 5;
+        dodgeTimer = dodgeDuration;
+        bIsDodging = true;
+
+        if (animatorController != null)
+        {
+            animatorController.PlayDodge();
+        }
+
+        Vector3 dodgeDirection = -transform.forward;
+        dodgeDirection.y = 0;
+        rb.linearVelocity = dodgeDirection * dodgeSpeed;
+        
+        return;
+
+    }
+    public float GetStat(STAT stat)
+    {
+        switch (stat)
+        {
+            case STAT.SPEED:
+                return speedStat;
+            case STAT.STAMINA:
+                return staminaStat;
+            case STAT.STRENGTH:
+                return strengthStat;
+            case STAT.REACH: 
+                return reachStat;
+            default:
+                return 0;
+        }
+    }
+
+    private void ApplyStun(float duration)
+    {
+        if (bIsStunned)
+        { return; }
+        StartCoroutine(StunCoroutine(duration));
+    }
+
+    // stun for a duration
+    private IEnumerator StunCoroutine(float duration)
+    {
+        
+        bIsStunned = true;
+        bCanAttack = false;
+        bIsAttacking = false;
+        bIsBlocking = false;
+        bIsDodging = false;
+        attackTime = 0;
+        
+        if (combatEffectsScript != null && fighter == FIGHTERCLASS.PLAYER)
+        {
+            //audio
+            combatEffectsScript.SetStunned(true);
+        }
+
+        if (vignetteScript != null)
+        {
+            vignetteScript.SetStunVignette(true);
+        }
+        // stop blocking and start stun animation
+        if (animatorController != null)
+        { 
+            animatorController.SetBlocking(false);
+            animatorController.SetMovementSpeed(0.0f);
+            animatorController.SetStunned(true);
+            yield return new WaitForEndOfFrame();
+            animatorController.SetStunned(false);
+        }
+
+        //stop movement
+        if (fighter == FIGHTERCLASS.PLAYER && playerMovement != null)
+        {
+            playerMovement.DisableMovement();
+        }
+        if (rb != null && fighter == FIGHTERCLASS.PLAYER)
+        {
+            Vector3 velocity = rb.linearVelocity;
+            rb.linearVelocity = new Vector3(0f, velocity.y, 0f);
+        }
+
+        yield return new WaitForSeconds(duration);
+
+        // dont exit stun with no stamina
+        staminaLeft = maxStamina * staminaAfterStunPercentage;
+
+        //ending stun
+        bIsStunned = false;
+        bCanAttack = true;
+
+        if (animatorController != null)
+        {
+            animatorController.EndStun();
+            
+        }
+        if (vignetteScript != null)
+        {
+            vignetteScript.SetStunVignette(false);
+        }
+
+        if (combatEffectsScript != null && fighter == FIGHTERCLASS.PLAYER)
+        {
+            combatEffectsScript.SetStunned(false);
+        }
+
+        if (fighter == FIGHTERCLASS.PLAYER && playerMovement != null)
+        { 
+            playerMovement.EnableMovement();
+        }
+
+    }
+
+    // Sets the players stats, adds one stat point to player each level
+    public void ChangeStats(int stamina, int strength, int speed, int reach)
+    { 
+        staminaStat = stamina;
+        strengthStat = strength;
+        speedStat = speed;
+        reachStat = reach;
+
+        health  =  40 + 10 * strengthStat;
+        maxHealth = health;
+        dodgeSpeed = 15f * (speedStat * 0.2f);
+        maxStamina = 50f * (0.5f * staminaStat);
+        staminaLeft = maxStamina;
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        if (punchOrigin == null)
+        {
+            return;
+        }
+
+        float previewReach =
+            baseJabDistance + reachStat * 0.1f;
+
+        Vector3 previewPosition =
+            punchOrigin.transform.position +
+            transform.forward * previewReach;
+
+        Gizmos.DrawWireSphere(
+            previewPosition,
+            attackRadius
+        );
+
+        Gizmos.DrawLine(
+            punchOrigin.transform.position,
+            previewPosition
+        );
+    }
+
+
+}
